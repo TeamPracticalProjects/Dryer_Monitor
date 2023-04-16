@@ -1,22 +1,27 @@
 /*
  * Project Temperature_Test
- * Description:
- * Author:
- * Date:
+ * Description:  Testing out code for reading temperature from DS18B20 in non-blocking mode
+ * Author: Bob Glicksman
+ * Version: 1.0
+ * Date: 4/16/23
+ * (c) 2023. Bob Glicksman, Jim Schrempp, Team Practical Projects.  All rights reserved.
  */
 
-
+// Libraries
 #include <OneWire.h>
 #include <spark-dallas-temperature.h>
 
+// Basic definitions for use in this program
 const int ONE_WIRE_BUS_PIN = D0;
 const int TEMPERATURE_RESOLUTION = 12;
 const int NUMBER_OF_SENSORS = 1;
 const int READOUT_INTERVAL = 2000;  // write current temperature to serial port every 2 seconds
 
+// Global variables for temperature measurement
 float currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
 String displayTemperature = "";   // global variable for string representation of the temperature
 
+// DS18B20 definitions
 OneWire oneWire(ONE_WIRE_BUS_PIN);   // create an instance of the one wire bus
 DallasTemperature sensors(&oneWire);  // create instance of DallasTemperature devices on the one wire bus
 DeviceAddress processTemperatureProbeAddress;  // array to hold the device ID code for the process monitoring temperature probe
@@ -27,6 +32,9 @@ void setup() {
   // initialize the internal LED
   pinMode(D7, OUTPUT);
   digitalWrite(D7, LOW);
+
+  // define globabl variable to hold the temperature
+  Particle.variable("Temperature", displayTemperature);
 
   // start the serial port and the oneWire sensors
   Serial.begin(9600);
@@ -47,7 +55,7 @@ void setup() {
   }
 
   // get the device address for the temperature sensor and set it up
-  sensors.getAddress(processTemperatureProbeAddress, 0);  // first sensor found
+  sensors.getAddress(processTemperatureProbeAddress, 0);  // first sensor found, index 0
   sensors.setResolution(TEMPERATURE_RESOLUTION);
   sensors.setWaitForConversion(false);  // set non-blocking operation
 
@@ -61,8 +69,10 @@ void loop() {
   unsigned long currentTime;
 
   // non-blocking call to read temperature and write it to global variable
-  readTemperatureSensors(); 
-
+  if(readTemperatureSensors() == true); {// new reading
+    displayTemperature = String(currentTemperature);  // set the global variable for cloud reading
+  }
+  
   // is it time to print out the temperature?
   currentTime = millis();
   if(diff(currentTime, lastDisplayTime) >= READOUT_INTERVAL) {
