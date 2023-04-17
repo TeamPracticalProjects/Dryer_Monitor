@@ -5,6 +5,8 @@
  * Version: 1.0
  * Date: 4/16/23
  * (c) 2023. Bob Glicksman, Jim Schrempp, Team Practical Projects.  All rights reserved.
+ * 
+ * version 1.1; 4/17/23.  Added in a global variable to record the maximum temperature measured.
  */
 
 // Libraries
@@ -20,6 +22,7 @@ const int READOUT_INTERVAL = 2000;  // write current temperature to serial port 
 // Global variables for temperature measurement
 float currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
 String displayTemperature = "";   // global variable for string representation of the temperature
+String maximumTemperature = "";   // global variable for string representation of the peak temperature
 
 // DS18B20 definitions
 OneWire oneWire(ONE_WIRE_BUS_PIN);   // create an instance of the one wire bus
@@ -33,8 +36,9 @@ void setup() {
   pinMode(D7, OUTPUT);
   digitalWrite(D7, LOW);
 
-  // define globabl variable to hold the temperature
+  // define globle variables to hold the temperature and maximum temperature
   Particle.variable("Temperature", displayTemperature);
+  Particle.variable("Maximum Temperature", maximumTemperature);
 
   // start the serial port and the oneWire sensors
   Serial.begin(9600);
@@ -66,11 +70,18 @@ void setup() {
 void loop() {
   static bool timeForNewDisplay = false;
   static unsigned long lastDisplayTime = millis();
+  static float maxTemp = -453.0;  // record the maximum temperature encountered
   unsigned long currentTime;
 
   // non-blocking call to read temperature and write it to global variable
   if(readTemperatureSensors() == true); {// new reading
     displayTemperature = String(currentTemperature);  // set the global variable for cloud reading
+
+    // determine of the latest temperature reading is the maximum encountered
+    if(currentTemperature > maxTemp) {
+      maxTemp = currentTemperature;
+      maximumTemperature = String(maxTemp);
+    }
   }
   
   // is it time to print out the temperature?
