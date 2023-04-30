@@ -7,6 +7,8 @@
  * (c) 2023. Bob Glicksman, Jim Schrempp, Team Practical Projects.  All rights reserved.
  * 
  * version 1.1; 4/17/23.  Added in a global variable to record the maximum temperature measured.
+ *   4/30/2023  now publishes an event every 30 seconds. Expected to webhook into a google sheet.
+ *
  */
 
 // Libraries
@@ -18,6 +20,8 @@ const int ONE_WIRE_BUS_PIN = D0;
 const int TEMPERATURE_RESOLUTION = 12;
 const int NUMBER_OF_SENSORS = 1;
 const int READOUT_INTERVAL = 2000;  // write current temperature to serial port every 2 seconds
+const int PUBLISH_INTERVAL = 30000; // write to google sheet this often
+
 
 // Global variables for temperature measurement
 float currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
@@ -31,6 +35,8 @@ DeviceAddress processTemperatureProbeAddress;  // array to hold the device ID co
 
 /********************************* setup() ***********************************/
 void setup() {
+
+    Time.zone(-8);
   
   // initialize the internal LED
   pinMode(D7, OUTPUT);
@@ -68,8 +74,9 @@ void setup() {
 
 /********************************* loop() ***********************************/
 void loop() {
-  static bool timeForNewDisplay = false;
+
   static unsigned long lastDisplayTime = millis();
+  static unsigned long lastPublishTime = millis();
   static float maxTemp = -453.0;  // record the maximum temperature encountered
   unsigned long currentTime;
 
@@ -84,14 +91,24 @@ void loop() {
     }
   }
   
-  // is it time to print out the temperature?
   currentTime = millis();
-  if(diff(currentTime, lastDisplayTime) >= READOUT_INTERVAL) {
+
+  // is it time to print out the temperature?
+  unsigned long intervalReadout = diff(currentTime, lastDisplayTime);
+  if (intervalReadout >= READOUT_INTERVAL) {
     Serial.print("Temperature = ");
     Serial.println(currentTemperature);
-
     lastDisplayTime = currentTime;
   }
+
+  // is it time to publish the temperature?
+  unsigned long intervalPublish = diff(currentTime, lastPublishTime);
+    if (intervalPublish >= PUBLISH_INTERVAL) {
+        //publish to spreadsheet
+        publishTempToSpreadsheet(currentTemperature);
+        Serial.println("Sent temp to g sheet");
+        lastPublishTime = currentTime;
+    }
 
 } // end of loop()
 
@@ -152,3 +169,23 @@ unsigned long diff (unsigned long newTime, unsigned long oldTime) {
   return timeInterval;
 
 } // end of diff()
+
+//  publish new temperature and humidity values
+void publishTempToSpreadsheet(float temp) {
+  String eData = "";
+
+  // build the data string with time, temp and rh values
+  eData += "{\"etime\":";
+  eData += String(Time.now());
+  eData += ",\"temp\":";
+  eData += String(temp);
+  eData += ",\"localtime\":\"";
+  eData += String(Time.format("%F %T"));
+  eData += "\"}";
+
+  // publish to the webhook
+  Particle.publish("dryerTemp", eData, PRIVATE);
+
+  return;
+} // end of publishTRH()
+
