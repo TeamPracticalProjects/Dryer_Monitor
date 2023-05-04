@@ -8,7 +8,7 @@
  * 
  * version 1.1; 4/17/23.  Added in a global variable to record the maximum temperature measured.
  *   4/30/2023  now publishes an event every 30 seconds. Expected to webhook into a google sheet.
- *
+ *   5/4/2023   constrains temp to -50:400;  tracks min temp;  tracks 5 point moving average temp
  */
 
 // Libraries
@@ -21,12 +21,15 @@ const int TEMPERATURE_RESOLUTION = 12;
 const int NUMBER_OF_SENSORS = 1;
 const int READOUT_INTERVAL = 2000;  // write current temperature to serial port every 2 seconds
 const int PUBLISH_INTERVAL = 30000; // write to google sheet this often
+const float GOOD_TEMP_READING_MAX = 400; // readings over this are ignored
+const float GOOD_TEMP_READING_MIN = -50; // readings below this are ignored
 
 
 // Global variables for temperature measurement
 float g_currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
 String g_displayTemperature = "";   // global variable for string representation of the temperature
 String g_maximumTemperature = "";   // global variable for string representation of the peak temperature
+String g_minimumTemperature = "";   // global variable for string representation of the minimum temperature
 
 // DS18B20 definitions
 OneWire oneWire(ONE_WIRE_BUS_PIN);   // create an instance of the one wire bus
@@ -45,6 +48,7 @@ void setup() {
   // define globle variables to hold the temperature and maximum temperature
   Particle.variable("Temperature", g_displayTemperature);
   Particle.variable("Maximum Temperature", g_maximumTemperature);
+  Particle.variable("Minimum Temperature", g_minimumTemperature);
 
   // start the serial port and the oneWire sensors
   Serial.begin(9600);
@@ -75,19 +79,46 @@ void setup() {
 /********************************* loop() ***********************************/
 void loop() {
 
+  static bool firstAvgTempCalc = true;
   static unsigned long lastDisplayTime = millis();
   static unsigned long lastPublishTime = millis();
-  static float maxTemp = -453.0;  // record the maximum temperature encountered
+  static float avgTemp = -253;  // moving average of the temperature
+  static float maxTemp = -253;  // record the maximum temperature encountered
+  static float minTemp = 999;
   unsigned long currentTime;
 
   // non-blocking call to read temperature and write it to global variable
-  if(readTemperatureSensors() == true) {// new reading
-    g_displayTemperature = String(g_currentTemperature);  // set the global variable for cloud reading
+  if(readTemperatureSensors() == true) {
 
-    // determine of the latest temperature reading is the maximum encountered
-    if(g_currentTemperature > maxTemp) {
-      maxTemp = g_currentTemperature;
-      g_maximumTemperature = String(maxTemp);
+    if ((g_currentTemperature < GOOD_TEMP_READING_MIN) || (g_currentTemperature > GOOD_TEMP_READING_MAX)) {
+        // spurious bad reading, ignore it
+
+    } else {
+
+        // new reading
+        g_displayTemperature = String(g_currentTemperature);  // set the global variable for cloud reading
+
+        // determine if the latest temperature reading is the maximum encountered
+        if(g_currentTemperature > maxTemp) {
+        maxTemp = g_currentTemperature;
+        g_maximumTemperature = String(maxTemp);
+        }
+
+        // determine if the latest temp reading is the minimum encountered
+        if(g_currentTemperature < minTemp) {
+        minTemp = g_currentTemperature;
+        g_minimumTemperature = String(minTemp);
+        }
+
+        // calculate the moving average
+        if (firstAvgTempCalc) {
+            // first time we've come through the loop since start up
+            avgTemp = g_currentTemperature;
+            firstAvgTempCalc =  false;
+        } else {
+            avgTemp =  avgTemp * 0.8 + g_currentTemperature * 0.2;  // 10 point moving average
+        }
+
     }
   }
   
@@ -96,8 +127,7 @@ void loop() {
   // is it time to print out the temperature?
   unsigned long intervalReadout = diff(currentTime, lastDisplayTime);
   if (intervalReadout >= READOUT_INTERVAL) {
-    Serial.print("Temperature = ");
-    Serial.println(g_currentTemperature);
+    Serial.printlnf("Temperature = %.2f  Average = %.2f   Max = %.2f   Min = %.2f", g_currentTemperature, avgTemp, maxTemp, minTemp);
     lastDisplayTime = currentTime;
   }
 
