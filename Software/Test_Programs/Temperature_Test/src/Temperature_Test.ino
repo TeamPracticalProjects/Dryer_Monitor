@@ -8,7 +8,9 @@
  * 
  * version 1.1; 4/17/23.  Added in a global variable to record the maximum temperature measured.
  *   4/30/2023  now publishes an event every 30 seconds. Expected to webhook into a google sheet.
- *   5/4/2023   constrains temp to -50:400;  tracks min temp;  tracks 5 point moving average temp
+ *   5/4/2023   constrains temp to -50:400;  
+ *              uses long and short moving averages to determine if dryer has turned off
+ *              when dryer is on, publish an event every 30 seconds, but for no longer than one elapsed hour
  */
 
 // Libraries
@@ -23,6 +25,7 @@ const int READOUT_INTERVAL = 2000;  // write current temperature to serial port 
 const int PUBLISH_INTERVAL = 30000; // write to google sheet this often
 const float GOOD_TEMP_READING_MAX = 400; // readings over this are ignored
 const float GOOD_TEMP_READING_MIN = -50; // readings below this are ignored
+const int MS_TO_LOG_DRYER_ON_TEMPS =  360000; // publish temps for one hour after dryer starts
 
 
 // Global variables for temperature measurement
@@ -82,10 +85,17 @@ void loop() {
     static bool firstAvgTempCalc = true;
     static unsigned long lastDisplayTime = millis();
     static unsigned long lastPublishTime = millis();
-    static float avgTemp = -253;  // moving average of the temperature
+    static unsigned long msTempStartedFalling = millis();
+    static float avgTempShort = -253;  // five sample moving average of the temperature
+    static float avgTempLong = -253;  // 60 sample moving average of the temperature
     static float maxTemp = -253;  // record the maximum temperature encountered
     static float minTemp = 999;
     unsigned long currentTime;
+    static bool isDryerOn =  false;
+    static bool msDryerTurnedOn = 999999999999; // when the dryer turned on
+
+    
+    currentTime = millis();
 
     // non-blocking call to read temperature and write it to global variable
     if(readTemperatureSensors() == true) {
@@ -113,32 +123,64 @@ void loop() {
             // calculate the moving average
             if (firstAvgTempCalc) {
                 // first time we've come through the loop since start up
-                avgTemp = g_currentTemperature;
+                avgTempShort = g_currentTemperature;
+                avgTempLong = g_currentTemperature;
                 firstAvgTempCalc =  false;
             } else {
-                avgTemp =  avgTemp * 0.8 + g_currentTemperature * 0.2;  // 10 point moving average
+                avgTempShort =  avgTempShort * 0.9 + g_currentTemperature * 0.1;  // 10 point moving average
+                avgTempLong = avgTempLong * 0.983   + g_currentTemperature * 0.017; // 60 point moving average
+            }
+
+            // Did the dryer just turn on?
+            if (!isDryerOn && (g_currentTemperature > avgTempLong + 4)) {
+                // temperature has jumped 4 degrees over the long average, so dryer must be on
+                // the probe changes temperature slowly, we have to use long average here
+                isDryerOn = true;
+                msDryerTurnedOn = millis();
+                Serial.println("Dryer turned on");
+            }
+
+            static bool isTempFalling = false;
+
+            if (!isTempFalling && (avgTempShort < avgTempLong)) {
+                isTempFalling = true;
+                msTempStartedFalling = millis();
+            } else {
+                isTempFalling = false;
+            }
+
+            // Did the dryer just turn off?
+            if (isDryerOn && isTempFalling && diff(currentTime, msTempStartedFalling) > 60000) {
+                // temperature has fallen below the long average for 60 seconds; the dryer is off
+                isDryerOn = false;
+                Serial.println("Dryer turned off");
+                // publish that it went off
+                publishTempToSpreadsheet(g_currentTemperature, avgTempShort, isDryerOn);
             }
 
         }
     }
-    
-    currentTime = millis();
+
 
     // is it time to print out the temperature?
     unsigned long intervalReadout = diff(currentTime, lastDisplayTime);
     if (intervalReadout >= READOUT_INTERVAL) {
-        Serial.printlnf("Temperature = %.2f  Average = %.2f   Max = %.2f   Min = %.2f", g_currentTemperature, avgTemp, maxTemp, minTemp);
+        Serial.printlnf("Temp: %.2f  AvgShort: %.2f  AvgLong: %.2f", 
+                        g_currentTemperature, avgTempShort, avgTempLong);
         lastDisplayTime = currentTime;
     }
 
-    // is it time to publish the temperature?
-    unsigned long intervalPublish = diff(currentTime, lastPublishTime);
-    if (intervalPublish >= PUBLISH_INTERVAL) {
-        //publish to spreadsheet
-        publishTempToSpreadsheet(g_currentTemperature);
-        Serial.println("Sent temp to g sheet");
-        lastPublishTime = currentTime;
-    }
+    // Only publish for one hour after dryer turns on
+    if (isDryerOn && diff(currentTime, msDryerTurnedOn) <= MS_TO_LOG_DRYER_ON_TEMPS) {
+        // is it time to publish the temperature?
+        unsigned long intervalPublish = diff(currentTime, lastPublishTime);
+        if (intervalPublish >= PUBLISH_INTERVAL) {
+            //publish to spreadsheet
+            publishTempToSpreadsheet(g_currentTemperature, avgTempShort, isDryerOn);
+            Serial.println("Sent temp to g sheet");
+            lastPublishTime = currentTime;
+        }
+    } 
 
 } // end of loop()
 
@@ -202,17 +244,29 @@ unsigned long diff (unsigned long newTime, unsigned long oldTime) {
 } // end of diff()
 
 //  publish new temperature and humidity values
-void publishTempToSpreadsheet(float temp) {
+void publishTempToSpreadsheet(float temp, float avgTemp, bool isDryerOn) {
     String eData = "";
 
     // build the data string with time, temp and rh values
-    eData += "{\"etime\":";
+    eData += "{";
+    
+    eData += "\"etime\":";
     eData += String(Time.now());
+
     eData += ",\"temp\":";
     eData += String(temp);
+
     eData += ",\"localtime\":\"";
     eData += String(Time.format("%F %T"));
-    eData += "\"}";
+    eData += "\"";
+
+    eData += ",\"avgTemp\":";
+    eData += String(avgTemp);
+
+    eData += ",\"isDryerOn\":";
+    eData += String(isDryerOn);
+
+    eData += "}";
 
     // publish to the webhook
     Particle.publish("dryerTemp", eData, PRIVATE);
