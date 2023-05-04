@@ -81,7 +81,7 @@ void loop() {
   unsigned long currentTime;
 
   // non-blocking call to read temperature and write it to global variable
-  if(readTemperatureSensors() == true); {// new reading
+  if(readTemperatureSensors() == true) {// new reading
     displayTemperature = String(currentTemperature);  // set the global variable for cloud reading
 
     // determine of the latest temperature reading is the maximum encountered
