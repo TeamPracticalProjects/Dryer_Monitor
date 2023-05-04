@@ -24,14 +24,14 @@ const int PUBLISH_INTERVAL = 30000; // write to google sheet this often
 
 
 // Global variables for temperature measurement
-float currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
-String displayTemperature = "";   // global variable for string representation of the temperature
-String maximumTemperature = "";   // global variable for string representation of the peak temperature
+float g_currentTemperature = 0.0f;  // global variable to hold the latest temperature reading
+String g_displayTemperature = "";   // global variable for string representation of the temperature
+String g_maximumTemperature = "";   // global variable for string representation of the peak temperature
 
 // DS18B20 definitions
 OneWire oneWire(ONE_WIRE_BUS_PIN);   // create an instance of the one wire bus
 DallasTemperature sensors(&oneWire);  // create instance of DallasTemperature devices on the one wire bus
-DeviceAddress processTemperatureProbeAddress;  // array to hold the device ID code for the process monitoring temperature probe
+DeviceAddress g_processTemperatureProbeAddress;  // array to hold the device ID code for the process monitoring temperature probe
 
 /********************************* setup() ***********************************/
 void setup() {
@@ -43,8 +43,8 @@ void setup() {
   digitalWrite(D7, LOW);
 
   // define globle variables to hold the temperature and maximum temperature
-  Particle.variable("Temperature", displayTemperature);
-  Particle.variable("Maximum Temperature", maximumTemperature);
+  Particle.variable("Temperature", g_displayTemperature);
+  Particle.variable("Maximum Temperature", g_maximumTemperature);
 
   // start the serial port and the oneWire sensors
   Serial.begin(9600);
@@ -65,7 +65,7 @@ void setup() {
   }
 
   // get the device address for the temperature sensor and set it up
-  sensors.getAddress(processTemperatureProbeAddress, 0);  // first sensor found, index 0
+  sensors.getAddress(g_processTemperatureProbeAddress, 0);  // first sensor found, index 0
   sensors.setResolution(TEMPERATURE_RESOLUTION);
   sensors.setWaitForConversion(false);  // set non-blocking operation
 
@@ -82,12 +82,12 @@ void loop() {
 
   // non-blocking call to read temperature and write it to global variable
   if(readTemperatureSensors() == true) {// new reading
-    displayTemperature = String(currentTemperature);  // set the global variable for cloud reading
+    g_displayTemperature = String(g_currentTemperature);  // set the global variable for cloud reading
 
     // determine of the latest temperature reading is the maximum encountered
-    if(currentTemperature > maxTemp) {
-      maxTemp = currentTemperature;
-      maximumTemperature = String(maxTemp);
+    if(g_currentTemperature > maxTemp) {
+      maxTemp = g_currentTemperature;
+      g_maximumTemperature = String(maxTemp);
     }
   }
   
@@ -97,7 +97,7 @@ void loop() {
   unsigned long intervalReadout = diff(currentTime, lastDisplayTime);
   if (intervalReadout >= READOUT_INTERVAL) {
     Serial.print("Temperature = ");
-    Serial.println(currentTemperature);
+    Serial.println(g_currentTemperature);
     lastDisplayTime = currentTime;
   }
 
@@ -105,7 +105,7 @@ void loop() {
   unsigned long intervalPublish = diff(currentTime, lastPublishTime);
     if (intervalPublish >= PUBLISH_INTERVAL) {
         //publish to spreadsheet
-        publishTempToSpreadsheet(currentTemperature);
+        publishTempToSpreadsheet(g_currentTemperature);
         Serial.println("Sent temp to g sheet");
         lastPublishTime = currentTime;
     }
@@ -140,7 +140,7 @@ boolean readTemperatureSensors() {
       return false;  // no new temps
     } 
     else {  // conversion complete -- get the values in degrees F
-      currentTemperature = sensors.getTempF (processTemperatureProbeAddress);
+      g_currentTemperature = sensors.getTempF (g_processTemperatureProbeAddress);
       readingInProgress = false;
       return true; // new temps available 
     }
