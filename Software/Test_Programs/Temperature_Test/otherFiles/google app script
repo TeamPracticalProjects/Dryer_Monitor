@@ -1,13 +1,13 @@
 function doGet(e) { 
 
-  var ss = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1DjUg_iIFJenxnjIdl1afc_Z3rcP_IaI0b6pu9VyNqgQ/edit#gid=0");
+  var ss = SpreadsheetApp.openByUrl("<<YOUR SPREADSHEET URL HERE>>");
  var sheet = ss.getSheetByName("Sheet1");
 
   addUser(e,sheet);
 }
 
 function doPost(e) { 
-  var ss = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1DjUg_iIFJenxnjIdl1afc_Z3rcP_IaI0b6pu9VyNqgQ/edit#gid=0");
+  var ss = SpreadsheetApp.openByUrl("<<YOUR SPREADSHEET URL HERE>>");
   var sheet = ss.getSheetByName("Sheet1"); 
   
   addUser(e, sheet);
