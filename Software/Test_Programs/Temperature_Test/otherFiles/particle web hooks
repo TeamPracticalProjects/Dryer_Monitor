@@ -1,0 +1,12 @@
+{
+    "name": "Dryer Temp",
+    "event": "dryerTemp",
+    "url": "<<YOUR APP SCRIPT WEB URL GOES HERE",
+    "requestType": "POST",
+    "noDefaults": false,
+    "rejectUnauthorized": true,
+    "todayCounters": {
+        "date": "20230505",
+        "success": 21
+    }
+}
