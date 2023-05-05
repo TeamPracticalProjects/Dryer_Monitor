@@ -1,0 +1,31 @@
+function doGet(e) { 
+
+  var ss = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1DjUg_iIFJenxnjIdl1afc_Z3rcP_IaI0b6pu9VyNqgQ/edit#gid=0");
+ var sheet = ss.getSheetByName("Sheet1");
+
+  addUser(e,sheet);
+}
+
+function doPost(e) { 
+  var ss = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1DjUg_iIFJenxnjIdl1afc_Z3rcP_IaI0b6pu9VyNqgQ/edit#gid=0");
+  var sheet = ss.getSheetByName("Sheet1"); 
+  
+  addUser(e, sheet);
+}
+
+function addUser(e, sheet) {
+   var eventname = e.parameter.event;
+   var datepublished = e.parameter.published_at;
+   var deviceid = e.parameter.coreid;
+
+   var edata = e.parameter.data;
+   var incomingData = JSON.parse(edata);
+
+   var etime = incomingData.etime ; 
+   var dlocal = incomingData.localtime ; 
+   var temp = incomingData.temp ;
+   var avgTemp = incomingData.avgTemp ;
+   var isDryerOn = incomingData.isDryerOn ;
+
+   sheet.appendRow([datepublished,etime,eventname,deviceid,dlocal,temp,avgTemp,isDryerOn]);
+}
