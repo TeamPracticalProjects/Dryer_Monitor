@@ -11,6 +11,7 @@
  *   5/4/2023   constrains temp to -50:400;  
  *              uses long and short moving averages to determine if dryer has turned off
  *              when dryer is on, publish an event every 30 seconds, but for no longer than one elapsed hour
+ *   Detecting Dryer Off is still a work in progress
  */
 
 // Libraries
@@ -76,6 +77,8 @@ void setup() {
     sensors.setResolution(TEMPERATURE_RESOLUTION);
     sensors.setWaitForConversion(false);  // set non-blocking operation
 
+    publishTempToSpreadsheet(0, 0, 0);  // log to the spreadsheet that we have started
+
 } // end of setup()
 
 
@@ -83,16 +86,17 @@ void setup() {
 void loop() {
 
     static bool firstAvgTempCalc = true;
-    static unsigned long lastDisplayTime = millis();
-    static unsigned long lastPublishTime = millis();
-    static unsigned long msTempStartedFalling = millis();
+    static unsigned long lastDisplayTime = 0;
+    static unsigned long lastPublishTime = 0;
+    static unsigned long msTempStartedFalling = 0;
     static float avgTempShort = -253;  // five sample moving average of the temperature
     static float avgTempLong = -253;  // 60 sample moving average of the temperature
     static float maxTemp = -253;  // record the maximum temperature encountered
     static float minTemp = 999;
+    static float maxTempWhileDryerOn = 0; // used to determine when the dryer has stopped
     unsigned long currentTime;
     static bool isDryerOn =  false;
-    static bool msDryerTurnedOn = 999999999999; // when the dryer turned on
+    static unsigned long msDryerTurnedOn = 999999999999; // when the dryer last turned on
 
     
     currentTime = millis();
@@ -138,6 +142,13 @@ void loop() {
                 isDryerOn = true;
                 msDryerTurnedOn = millis();
                 Serial.println("Dryer turned on");
+                // publish that it went on
+                publishTempToSpreadsheet(g_currentTemperature, avgTempShort, 99);
+            }
+
+            // track the maximum temperature while the dryer is on
+            if (isDryerOn && g_currentTemperature > maxTempWhileDryerOn) {
+                maxTempWhileDryerOn = g_currentTemperature;
             }
 
             static bool isTempFalling = false;
@@ -150,12 +161,14 @@ void loop() {
             }
 
             // Did the dryer just turn off?
-            if (isDryerOn && isTempFalling && diff(currentTime, msTempStartedFalling) > 60000) {
-                // temperature has fallen below the long average for 60 seconds; the dryer is off
+            if (isDryerOn && (g_currentTemperature < 0.8 * maxTempWhileDryerOn) 
+                       && diff(currentTime, msTempStartedFalling) > 60000) {
+                // temperature has fallen below the max running temp for 60 seconds; the dryer is off or on cool down cycle
                 isDryerOn = false;
+                maxTempWhileDryerOn = 0;
                 Serial.println("Dryer turned off");
                 // publish that it went off
-                publishTempToSpreadsheet(g_currentTemperature, avgTempShort, isDryerOn);
+                publishTempToSpreadsheet(g_currentTemperature, avgTempShort, -1);
             }
 
         }
@@ -171,7 +184,8 @@ void loop() {
     }
 
     // Only publish for one hour after dryer turns on
-    if (isDryerOn && diff(currentTime, msDryerTurnedOn) <= MS_TO_LOG_DRYER_ON_TEMPS) {
+    //if (isDryerOn && diff(currentTime, msDryerTurnedOn) <= MS_TO_LOG_DRYER_ON_TEMPS) {
+    if (diff(currentTime, msDryerTurnedOn) <= MS_TO_LOG_DRYER_ON_TEMPS) {
         // is it time to publish the temperature?
         unsigned long intervalPublish = diff(currentTime, lastPublishTime);
         if (intervalPublish >= PUBLISH_INTERVAL) {
@@ -244,7 +258,7 @@ unsigned long diff (unsigned long newTime, unsigned long oldTime) {
 } // end of diff()
 
 //  publish new temperature and humidity values
-void publishTempToSpreadsheet(float temp, float avgTemp, bool isDryerOn) {
+void publishTempToSpreadsheet(float temp, float avgTemp, int isDryerOn) {
     String eData = "";
 
     // build the data string with time, temp and rh values
