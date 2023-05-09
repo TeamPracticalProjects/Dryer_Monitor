@@ -11,7 +11,10 @@
  *   5/4/2023   constrains temp to -50:400;  
  *              uses long and short moving averages to determine if dryer has turned off
  *              when dryer is on, publish an event every 30 seconds, but for no longer than one elapsed hour
- *   Detecting Dryer Off is still a work in progress
+ *   5/9/2023   Dryer is considered off when the temp drops to 20% of the peak seen since
+ *                the dryer turned on. 
+ *              Particle event DryerAlertSC is sent when the dryer turns off
+ *   
  */
 
 // Libraries
@@ -169,6 +172,10 @@ void loop() {
                 Serial.println("Dryer turned off");
                 // publish that it went off
                 publishTempToSpreadsheet(g_currentTemperature, avgTempShort, -1);
+                
+                // publish to the webhook for Slack or SMS, etc
+                Particle.publish("DryerAlertSC", "Dryer Turned Off", PRIVATE);
+
             }
 
         }
@@ -257,11 +264,11 @@ unsigned long diff (unsigned long newTime, unsigned long oldTime) {
 
 } // end of diff()
 
-//  publish new temperature and humidity values
+//  publish new dryer values
 void publishTempToSpreadsheet(float temp, float avgTemp, int isDryerOn) {
     String eData = "";
 
-    // build the data string with time, temp and rh values
+    // build the JSON data string with all the values
     eData += "{";
     
     eData += "\"etime\":";
@@ -286,5 +293,5 @@ void publishTempToSpreadsheet(float temp, float avgTemp, int isDryerOn) {
     Particle.publish("dryerTemp", eData, PRIVATE);
 
     return;
-} // end of publishTRH()
+} // end of publishTempToSpreadsheet()
 

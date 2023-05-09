@@ -10,3 +10,15 @@
         "success": 21
     }
 }
+
+
+
+{
+    "name": "Dryer Alert SC for hooks.slack.com",
+    "event": "DryerAlertSC",
+    "url": "https://hooks.slack.com/<<Your SLACK ALERT URL goes here",
+    "requestType": "POST",
+    "noDefaults": true,
+    "rejectUnauthorized": true,
+    "json": "{\n    \"text\" : \"event: {{{PARTICLE_EVENT_NAME}}},\n              data: {{{PARTICLE_EVENT_VALUE}}},\n              coreid: {{{PARTICLE_DEVICE_ID}}},\n              published_at: {{{PARTICLE_PUBLISHED_AT}}}\n             \"\n    \n}"
+}
